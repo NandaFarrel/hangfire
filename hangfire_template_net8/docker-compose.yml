@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # SQL Server Database
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: hangfire-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${SQL_SERVER_PASSWORD}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - hangfire-network
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SQL_SERVER_PASSWORD} -Q "SELECT 1"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # OpenProject
+  openproject:
+    image: openproject/openproject:14
+    container_name: hangfire-openproject
+    environment:
+      - OPENPROJECT_SECRET_KEY_BASE=${OPENPROJECT_SECRET_KEY}
+      - OPENPROJECT_HOST__NAME=localhost:8080
+    ports:
+      - "8080:80"
+    volumes:
+      - openproject-data:/var/openproject/assets
+    networks:
+      - hangfire-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health_checks/default"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Hangfire Sync Application
+  hangfire-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hangfire-sync-app
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5000
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=hangfire_sync_db;User Id=sa;Password=${SQL_SERVER_PASSWORD};TrustServerCertificate=True;
+      - ConnectionStrings__HangfireConnection=Server=sqlserver,1433;Database=hangfire_sync_db;User Id=sa;Password=${SQL_SERVER_PASSWORD};TrustServerCertificate=True;
+      - OpenProject__Url=http://openproject
+      - OpenProject__ApiKey=${OPENPROJECT_API_KEY}
+      - OpenProject__DefaultProjectId=${OPENPROJECT_PROJECT_ID}
+      - Trello__ApiKey=${TRELLO_API_KEY}
+      - Trello__Token=${TRELLO_TOKEN}
+      - Trello__BoardId=${TRELLO_BOARD_ID}
+    ports:
+      - "5000:5000"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      openproject:
+        condition: service_healthy
+    networks:
+      - hangfire-network
+    restart: unless-stopped
+
+volumes:
+  sqlserver-data:
+  openproject-data:
+
+networks:
+  hangfire-network:
+    driver: bridge
