@@ -14,11 +14,14 @@ services:
       - sqlserver-data:/var/opt/mssql
     networks:
       - hangfire-network
+    restart: unless-stopped
     healthcheck:
-      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SQL_SERVER_PASSWORD} -Q "SELECT 1"
+      # Use a simple TCP check on port 1433 so we don't rely on sqlcmd being installed
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/1433 >/dev/null 2>&1'"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 30
+      start_period: 30s
 
   # OpenProject
   openproject:
@@ -26,18 +29,21 @@ services:
     container_name: hangfire-openproject
     environment:
       - OPENPROJECT_SECRET_KEY_BASE=${OPENPROJECT_SECRET_KEY}
-      - OPENPROJECT_HOST__NAME=localhost:8080
+      - OPENPROJECT_HOST__NAME=localhost:2000
     ports:
-      - "8080:80"
+      - "2000:80"
     volumes:
       - openproject-data:/var/openproject/assets
     networks:
       - hangfire-network
+    restart: unless-stopped
     healthcheck:
+      # Keep curl-based healthcheck but give more retries/start period (OpenProject can take a while)
       test: ["CMD", "curl", "-f", "http://localhost/health_checks/default"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   # Hangfire Sync Application
   hangfire-app:
@@ -47,9 +53,9 @@ services:
     container_name: hangfire-sync-app
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:5000
-      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=hangfire_sync_db;User Id=sa;Password=${SQL_SERVER_PASSWORD};TrustServerCertificate=True;
-      - ConnectionStrings__HangfireConnection=Server=sqlserver,1433;Database=hangfire_sync_db;User Id=sa;Password=${SQL_SERVER_PASSWORD};TrustServerCertificate=True;
+      - ASPNETCORE_URLS=http://+:8000
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Initial Catalog=hangfire_sync_db;User Id=sa;Password=${SQL_SERVER_PASSWORD};Encrypt=False;TrustServerCertificate=True;Connection Timeout=30;
+      - ConnectionStrings__HangfireConnection=Server=sqlserver,1433;Initial Catalog=hangfire_sync_db;User Id=sa;Password=${SQL_SERVER_PASSWORD};Encrypt=False;TrustServerCertificate=True;Connection Timeout=30;
       - OpenProject__Url=http://openproject
       - OpenProject__ApiKey=${OPENPROJECT_API_KEY}
       - OpenProject__DefaultProjectId=${OPENPROJECT_PROJECT_ID}
@@ -57,7 +63,7 @@ services:
       - Trello__Token=${TRELLO_TOKEN}
       - Trello__BoardId=${TRELLO_BOARD_ID}
     ports:
-      - "5000:5000"
+      - "8000:8000"
     depends_on:
       sqlserver:
         condition: service_healthy
