@@ -1,0 +1,26 @@
+==============================================
+BACA INI DULU SEBELUM MULAI!
+==============================================
+
+Halo! Folder ini berisi aplikasi Hangfire Trello-OpenProject Sync.
+
+LANGKAH PERTAMA:
+1. Buka file: SETUP_FRIEND.md
+2. Ikuti instruksi disana step-by-step
+3. Jangan skip langkah apapun!
+
+YANG PERLU DISIAPKAN:
+- Docker Desktop (install dulu jika belum ada)
+- Trello API credentials
+- OpenProject API credentials
+
+FILE PENTING:
+- SETUP_FRIEND.md  → Panduan lengkap untuk Anda
+- .env.example     → Template config (WAJIB copy jadi .env!)
+- start.sh         → Script otomatis untuk jalankan app
+- README.md        → Dokumentasi lengkap
+
+JANGAN PANIK jika ada error!
+Baca SETUP_FRIEND.md bagian Troubleshooting.
+
+Selamat mencoba!

@@ -2,7 +2,6 @@ using Hangfire;
 using Hangfire.SqlServer;
 using hangfire_template.Data;
 using hangfire_template.Services;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,7 +16,7 @@ builder.Services.AddRazorPages();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Hangfire Configuration (added before building app)
+// Hangfire Configuration
 builder.Services.AddHangfire(configuration => configuration
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
@@ -53,40 +52,6 @@ builder.Services.AddScoped<TrelloSyncJob>();
 
 var app = builder.Build();
 
-// Initialize Database BEFORE using Hangfire
-// This ensures the database and Hangfire schema exist
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    try
-    {
-        // Apply pending migrations and ensure database is created
-        dbContext.Database.Migrate();
-        Console.WriteLine("✅ Database migration completed successfully.");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"⚠️ Database migration error: {ex.Message}");
-        throw; // Fail startup if database migration fails
-    }
-}
-
-// Initialize Hangfire schema
-using (var scope = app.Services.CreateScope())
-{
-    var hangfireConnection = builder.Configuration.GetConnectionString("HangfireConnection");
-    try
-    {
-        SqlServerObjectsInstaller.Install(new SqlConnection(hangfireConnection));
-        Console.WriteLine("✅ Hangfire schema initialized successfully.");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"⚠️ Hangfire schema initialization warning: {ex.Message}");
-        // Don't fail startup if schema already exists
-    }
-}
-
 // Configure the HTTP request pipeline
 if (!app.Environment.IsDevelopment())
 {
@@ -94,8 +59,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-// Don't redirect to HTTPS in Docker - HTTP is fine for internal communication
-// app.UseHttpsRedirection();
+app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthorization();
@@ -116,6 +80,8 @@ app.MapControllerRoute(
     pattern: "api/{controller}/{action}/{id?}");
 
 // Schedule Recurring Jobs
+// NOTE: OpenProjectFetchJob was previously disabled due to authentication issues
+// This is now enabled with proper API key configuration
 RecurringJob.AddOrUpdate<OpenProjectFetchJob>(
     "fetch-from-openproject",
     job => job.FetchAllWorkPackagesAsync(),
